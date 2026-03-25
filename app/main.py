@@ -346,6 +346,25 @@ async def simple_get(request: Request):
     })
 
 
+async def _porsche_login(email: str, password: str,
+                         captcha_code: str | None, state: str | None) -> tuple:
+    """Returns (refresh_token, vehicles) or raises."""
+    async with httpx.AsyncClient() as client:
+        conn = Connection(
+            email=email,
+            password=password,
+            captcha_code=captcha_code or None,
+            state=state or None,
+            async_client=client,
+        )
+        acc = PorscheConnectAccount(connection=conn)
+        vehicles = await acc.get_vehicles()
+        refresh_token = dict(conn.token).get("refresh_token", "")
+        if not refresh_token:
+            raise ValueError("No refresh token in response.")
+        return refresh_token, vehicles
+
+
 @app.post("/simple")
 async def simple_post(
     request: Request,
@@ -355,51 +374,49 @@ async def simple_post(
     captcha_state:str = Form(""),
 ):
     """Authenticate with Porsche, return refresh token — nothing is stored."""
-    import httpx as _httpx
-    try:
-        async with _httpx.AsyncClient() as client:
-            conn = Connection(
-                email=email.strip(),
-                password=password,
-                captcha_code=captcha_code.strip() or None,
-                state=captcha_state.strip() or None,
-                async_client=client,
+    ctx_ok  = {"token": None, "vehicles": [], "error": None,
+                "captcha": None, "captcha_state": None, "prefill_email": None}
+    ctx_err = {"token": None, "vehicles": [], "error": None,
+               "captcha": None, "captcha_state": None, "prefill_email": email.strip()}
+
+    last_exc: Exception | None = None
+    for attempt in range(1, 4):          # up to 3 attempts for transient errors
+        try:
+            refresh_token, vehicles = await _porsche_login(
+                email.strip(), password,
+                captcha_code.strip(), captcha_state.strip(),
             )
-            acc = PorscheConnectAccount(connection=conn)
-            vehicles = await acc.get_vehicles()
-            token_dict = dict(conn.token)
-            refresh_token = token_dict.get("refresh_token", "")
-            if not refresh_token:
-                raise ValueError("No refresh token received.")
-        return templates.TemplateResponse(request, "simple.html", {
-            "token": refresh_token,
-            "vehicles": vehicles,
-            "error": None,
-            "captcha": None, "captcha_state": None,
-            "prefill_email": None,
-        })
-    except PorscheWrongCredentialsError:
-        return templates.TemplateResponse(request, "simple.html", {
-            "token": None, "vehicles": [],
-            "error": "Wrong email or password.",
-            "captcha": None, "captcha_state": None,
-            "prefill_email": email,
-        }, status_code=401)
-    except PorscheCaptchaRequiredError as exc:
-        return templates.TemplateResponse(request, "simple.html", {
-            "token": None, "vehicles": [],
-            "error": None,
-            "captcha": exc.captcha,      # base64 image (data:image/svg+xml;base64,...)
-            "captcha_state": exc.state,
-            "prefill_email": email,
-        }, status_code=200)
-    except Exception as exc:
-        return templates.TemplateResponse(request, "simple.html", {
-            "token": None, "vehicles": [],
-            "error": f"Error: {exc}",
-            "captcha": None, "captcha_state": None,
-            "prefill_email": email,
-        }, status_code=500)
+            return templates.TemplateResponse(request, "simple.html", {
+                **ctx_ok, "token": refresh_token, "vehicles": vehicles,
+            })
+
+        except PorscheWrongCredentialsError:
+            return templates.TemplateResponse(request, "simple.html", {
+                **ctx_err, "error": "Wrong email or password.",
+            }, status_code=401)
+
+        except PorscheCaptchaRequiredError as exc:
+            return templates.TemplateResponse(request, "simple.html", {
+                **ctx_err, "captcha": exc.captcha, "captcha_state": exc.state,
+            })
+
+        except (OSError, httpx.ConnectError, httpx.ConnectTimeout) as exc:
+            last_exc = exc
+            _log.warning("simple_post attempt %d: network error %s", attempt, exc)
+            if attempt < 3:
+                await asyncio.sleep(2)   # brief pause before retry
+            continue
+
+        except Exception as exc:
+            return templates.TemplateResponse(request, "simple.html", {
+                **ctx_err, "error": str(exc),
+            }, status_code=500)
+
+    # All retries exhausted
+    return templates.TemplateResponse(request, "simple.html", {
+        **ctx_err,
+        "error": "Connection to Porsche servers failed after 3 attempts. Please try again in a few seconds.",
+    }, status_code=503)
 
 
 @app.get("/logout")
