@@ -120,7 +120,7 @@ _STATIC_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 
 # Auth middleware registered first → becomes INNERMOST → runs after session MW
-_PUBLIC = {"/login"}
+_PUBLIC = {"/login", "/simple"}
 _PUBLIC_PREFIXES = ("/static",)
 _API_PREFIXES = ("/vehicles", "/health", "/refresh", "/openapi.json")
 
@@ -334,6 +334,57 @@ async def login_submit(request: Request, password: str = Form(...)):
         "error": "Wrong password. Please try again.",
         "default_password": is_default_password(),
     }, status_code=401)
+
+
+@app.get("/simple")
+async def simple_get(request: Request):
+    """Token helper page — enter Porsche credentials, get refresh token for Shelly direct script."""
+    return templates.TemplateResponse(request, "simple.html", {
+        "token": None, "vehicles": [], "error": None,
+    })
+
+
+@app.post("/simple")
+async def simple_post(
+    request: Request,
+    email:    str = Form(...),
+    password: str = Form(...),
+):
+    """Authenticate with Porsche, return refresh token — nothing is stored."""
+    import httpx as _httpx
+    try:
+        async with _httpx.AsyncClient() as client:
+            conn = Connection(
+                email=email.strip(),
+                password=password,
+                async_client=client,
+            )
+            acc = PorscheConnectAccount(connection=conn)
+            vehicles = await acc.get_vehicles()
+            token_dict = dict(conn.token)
+            refresh_token = token_dict.get("refresh_token", "")
+            if not refresh_token:
+                raise ValueError("No refresh token received.")
+        return templates.TemplateResponse(request, "simple.html", {
+            "token": refresh_token,
+            "vehicles": vehicles,
+            "error": None,
+        })
+    except PorscheWrongCredentialsError:
+        return templates.TemplateResponse(request, "simple.html", {
+            "token": None, "vehicles": [],
+            "error": "Wrong email or password.",
+        }, status_code=401)
+    except PorscheCaptchaRequiredError:
+        return templates.TemplateResponse(request, "simple.html", {
+            "token": None, "vehicles": [],
+            "error": "Porsche requires a captcha. Please log in via the My Porsche app first, then try again.",
+        }, status_code=428)
+    except Exception as exc:
+        return templates.TemplateResponse(request, "simple.html", {
+            "token": None, "vehicles": [],
+            "error": f"Error: {exc}",
+        }, status_code=500)
 
 
 @app.get("/logout")
