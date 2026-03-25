@@ -90,6 +90,20 @@
         <div class="alert alert-err">{{ error }}</div>
         {% endif %}
 
+        {% if has_cached_token %}
+        <div class="alert alert-warn" style="margin-bottom:1.25rem;">
+            <strong>This server already has a valid token cached.</strong><br>
+            Enter the dashboard password to retrieve it — no need to log in again.
+        </div>
+        <form method="post" action="/simple/cached" style="margin-bottom:1.5rem;">
+            <label for="cp">Dashboard password</label>
+            <input type="password" id="cp" name="password" placeholder="••••••••" required autofocus>
+            <button type="submit" class="btn" style="margin-top:.25rem;">Get cached token →</button>
+        </form>
+        <hr style="border:none;border-top:1px solid var(--border);margin:1.5rem 0;">
+        <p style="font-size:.78rem;color:var(--muted);text-align:center;margin-bottom:1rem;">— or login with credentials below —</p>
+        {% endif %}
+
         <form method="post" action="/simple" id="form">
             <label for="em">My Porsche Email</label>
             <input type="email" id="em" name="email"

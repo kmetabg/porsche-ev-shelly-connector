@@ -120,7 +120,7 @@ _STATIC_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 
 # Auth middleware registered first → becomes INNERMOST → runs after session MW
-_PUBLIC = {"/login", "/simple"}
+_PUBLIC = {"/login", "/simple", "/simple/cached"}
 _PUBLIC_PREFIXES = ("/static",)
 _API_PREFIXES = ("/vehicles", "/health", "/refresh", "/openapi.json")
 
@@ -338,12 +338,59 @@ async def login_submit(request: Request, password: str = Form(...)):
 
 @app.get("/simple")
 async def simple_get(request: Request):
-    """Token helper page — enter Porsche credentials, get refresh token for Shelly direct script."""
+    """Token helper page — get refresh token for Shelly Direct setup."""
+    has_cached = False
+    try:
+        if TOKEN_FILE.exists():
+            td = json.loads(TOKEN_FILE.read_text())
+            has_cached = bool(td.get("refresh_token"))
+    except Exception:
+        pass
     return templates.TemplateResponse(request, "simple.html", {
         "token": None, "vehicles": [], "error": None,
         "captcha": None, "captcha_state": None,
-        "prefill_email": None,
+        "prefill_email": None, "has_cached_token": has_cached,
     })
+
+
+@app.post("/simple/cached")
+async def simple_cached(request: Request, password: str = Form(...)):
+    """Return cached refresh token after password confirmation."""
+    if not check_dashboard_password(password):
+        has_cached = False
+        try:
+            td = json.loads(TOKEN_FILE.read_text())
+            has_cached = bool(td.get("refresh_token"))
+        except Exception:
+            pass
+        return templates.TemplateResponse(request, "simple.html", {
+            "token": None, "vehicles": [], "error": "Wrong password.",
+            "captcha": None, "captcha_state": None,
+            "prefill_email": None, "has_cached_token": has_cached,
+        }, status_code=401)
+    try:
+        td = json.loads(TOKEN_FILE.read_text())
+        refresh_token = td.get("refresh_token", "")
+        if not refresh_token:
+            raise ValueError("No refresh_token in cache")
+        email, _ = get_porsche_credentials()
+        vehicles_raw = td.get("vehicles", [])
+        # Get VIN from the in-memory cache
+        v_data = [{"vin": v["vin"], "model_name": v.get("model_name","Porsche"),
+                   "model_year": v.get("model_year","")}
+                  for v in _cache["vehicles"]] \
+                 or [{"vin": "see My Porsche app", "model_name": "Your Porsche", "model_year": ""}]
+        return templates.TemplateResponse(request, "simple.html", {
+            "token": refresh_token, "vehicles": v_data, "error": None,
+            "captcha": None, "captcha_state": None,
+            "prefill_email": None, "has_cached_token": True,
+        })
+    except Exception as exc:
+        return templates.TemplateResponse(request, "simple.html", {
+            "token": None, "vehicles": [], "error": f"Could not read cached token: {exc}",
+            "captcha": None, "captcha_state": None,
+            "prefill_email": None, "has_cached_token": False,
+        }, status_code=500)
 
 
 def _porsche_login_sync(email: str, password: str,
@@ -441,18 +488,72 @@ def _porsche_login_sync(email: str, password: str,
 
             resume_path = r3.headers.get("location", "")
             if not resume_path:
-                raise PorscheExceptionError("No resume path after password")
+                raise PorscheExceptionError(f"No resume path after password (status {r3.status_code})")
 
-            # Step 4: Resume → get auth code
+            # Follow the redirect chain until we find my-porsche-app://...?code=xxx
             import time; time.sleep(2.5)
-            resume_url = resume_path if resume_path.startswith("http") \
-                         else f"https://{AUTH_SERVER}{resume_path}"
-            r4 = c.get(resume_url, headers=headers)
-            loc4 = r4.headers.get("location", "")
-            code_params = parse_qs(urlparse(loc4).query)
-            auth_code = code_params.get("code", [None])[0]
+            auth_code = None
+            current_url = resume_path if resume_path.startswith("http") \
+                          else f"https://{AUTH_SERVER}{resume_path}"
+
+            for _hop in range(8):   # follow up to 8 hops
+                # Check if current URL already has the code
+                current_params = parse_qs(urlparse(current_url).query)
+                if current_params.get("code"):
+                    auth_code = current_params["code"][0]
+                    break
+
+                # Stop if we've landed on a non-HTTP scheme (my-porsche-app://)
+                if not current_url.startswith("http"):
+                    auth_code = current_params.get("code", [None])[0]
+                    break
+
+                r_hop = c.get(current_url, headers=headers)
+                _log.warning("DBG hop%d: GET %s → %s loc=%s",
+                             _hop, current_url[:60], r_hop.status_code,
+                             r_hop.headers.get("location","")[:80])
+
+                if r_hop.status_code == 302:
+                    next_loc = r_hop.headers.get("location", "")
+                    hop_params = parse_qs(urlparse(next_loc).query)
+                    if hop_params.get("code"):
+                        auth_code = hop_params["code"][0]
+                        break
+                    if not next_loc.startswith("http"):
+                        auth_code = hop_params.get("code", [None])[0]
+                        break
+                    current_url = next_loc
+                elif r_hop.status_code == 200:
+                    # 200 with no code — might need another authorize request
+                    # Log the URL for debugging
+                    _log.warning("DBG 200 at %s — checking for code in URL", current_url[:80])
+                    break
+                else:
+                    _log.warning("DBG unexpected status %s at %s", r_hop.status_code, current_url[:60])
+                    break
+
+            # ── Fallback for accounts with Passkeys / extra security ──────────
+            # Auth0 may redirect to my.porsche.com instead of mobile callback.
+            # Since the session is now established, a 2nd /authorize gives code.
             if not auth_code:
-                raise PorscheExceptionError(f"No auth code in redirect: {loc4[:80]}")
+                _log.warning("DBG fallback: 2nd /authorize (session established)")
+                r_auth2 = c.get(f"https://{AUTH_SERVER}/authorize", headers=headers, params={
+                    "response_type": "code", "client_id": CLIENT_ID,
+                    "redirect_uri": REDIRECT_URI, "audience": AUDIENCE,
+                    "scope": SCOPE, "state": "porsche-shelly-2",
+                })
+                _log.warning("DBG auth2=%s loc=%s", r_auth2.status_code,
+                             r_auth2.headers.get("location", "")[:120])
+                if r_auth2.status_code == 302:
+                    loc2 = r_auth2.headers.get("location", "")
+                    p2 = parse_qs(urlparse(loc2).query)
+                    auth_code = p2.get("code", [None])[0]
+
+            if not auth_code:
+                raise PorscheExceptionError(
+                    f"Auth code not found after following redirects. "
+                    f"Last URL: {current_url[:80]}"
+                )
 
         # ── Step 5: Exchange code for tokens ──────────────────────────────────
         r5 = c.post(TOKEN_URL, headers=headers, data={
