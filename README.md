@@ -33,13 +33,19 @@ Shelly logs all component values over time. Track your battery level trends, cha
 Trigger push notifications when charging starts or finishes. Get alerted if charging unexpectedly stops (e.g. cable disconnected, power outage) — directly to your phone via the Shelly app.
 
 ### ⚡ 4. Automatic load balancing
-When the Taycan starts charging (Charging kW > 0), automatically turn off other high-power loads — water heater, dryer, dishwasher — to stay within your home's power limit. When charging ends, restore them automatically.
+When the Taycan starts charging (`Charging kW > 0`), automatically turn off other high-power loads — water heater, dryer, dishwasher — to stay within your home's power limit. When charging ends, restore them automatically.
+
+> **How:** Porsche Connect does not support remotely starting/stopping charging. Connect those other loads (not the EV charger) to Shelly relays — the script tells Shelly when the car is charging, Shelly handles the rest.
 
 ### 🛑 5. Stop charging at target %
-Create a Shelly scene: *if Battery % reaches 80 → stop charging*. Preserve battery longevity by avoiding unnecessary charging to 100%.
+Set the charging target via the Porsche app (e.g. 80%) — the car stops automatically. Use Shelly to *notify* you when the target is reached, or trigger other automations at that point.
+
+> **Note:** Direct start/stop of charging is not available through Porsche Connect. To control the charger power itself you need a Shelly relay or smart plug between the wall outlet and the charger.
 
 ### ☀️ 6. Solar-aware charging
-If you have solar panels connected to Shelly (energy meter), automatically start charging only when solar production exceeds home consumption — charge for free from the sun. Stop charging when clouds reduce output below the threshold.
+Monitor solar production with a Shelly energy meter. When solar output exceeds home consumption, send a push notification or trigger a scene reminding you to plug in. When solar drops, get alerted.
+
+> **Full automation** (auto start/stop the charger based on solar) requires a Shelly relay on the charger power supply — then use the `Charging kW` and `Battery %` values from this script as triggers.
 
 ---
 
