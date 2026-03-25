@@ -388,7 +388,7 @@ def _porsche_login_sync(email: str, password: str,
             auth_code = loc_params["code"][0]
         else:
             # ── Step 2/3: Identifier First flow ──────────────────────────────
-            auth0_state = captcha_state or loc_params.get("state", [None])[0]
+            auth0_state = state or loc_params.get("state", [None])[0]
             if not auth0_state:
                 raise PorscheExceptionError("No state parameter from authorize")
 
