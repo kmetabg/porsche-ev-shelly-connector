@@ -20,4 +20,9 @@ services:
         value: "10"
 
       - key: PORSCHE_TOKEN_FILE
-        value: /tmp/porsche_token.json   # /tmp е наличен на Render free tier
+        value: /tmp/porsche_token.json
+
+      # Render sets $PORT automatically — pass it as UVICORN_PORT
+      - key: UVICORN_PORT
+        fromEnvGroup: render-system
+        value: $PORT

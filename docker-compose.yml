@@ -6,7 +6,9 @@ services:
     env_file:
       - .env
     ports:
-      - "127.0.0.1:${PORT:-8061}:8000"
+      - "127.0.0.1:${HOST_PORT:-8061}:8000"
+    environment:
+      PORT: "8000"   # always 8000 inside container; HOST_PORT controls host mapping
     volumes:
       - ./data:/app/data
     restart: unless-stopped

@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="bg">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Вход — Porsche Connect</title>
+    <title>Login — Porsche Connect</title>
     <style>
         :root {
             --bg: #080808; --surface: #111; --border: #272727;
@@ -14,82 +14,34 @@
         }
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         body {
-            background: var(--bg);
-            color: var(--text);
+            background: var(--bg); color: var(--text);
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 1.5rem;
+            min-height: 100vh; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; padding: 1.5rem;
         }
-        .logo {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: .5rem;
-            margin-bottom: 2rem;
-        }
+        .logo { display: flex; flex-direction: column; align-items: center; gap: .5rem; margin-bottom: 2rem; }
         .logo svg { width: 44px; height: 52px; }
-        .logo-text {
-            font-size: .8rem;
-            font-weight: 700;
-            letter-spacing: .18em;
-            color: var(--gold);
-        }
+        .logo-text { font-size: .8rem; font-weight: 700; letter-spacing: .18em; color: var(--gold); }
         .card {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 2rem 2.25rem;
-            width: 100%;
-            max-width: 360px;
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 12px; padding: 2rem 2.25rem; width: 100%; max-width: 360px;
         }
         h1 { font-size: 1.25rem; font-weight: 700; margin-bottom: .2rem; }
         .sub { color: var(--muted); font-size: .85rem; margin-bottom: 1.5rem; }
-        label {
-            display: block;
-            font-size: .72rem;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: .07em;
-            color: var(--muted);
-            margin-bottom: .35rem;
-        }
+        label { display: block; font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin-bottom: .35rem; }
         input[type=password] {
-            width: 100%;
-            padding: .65rem .9rem;
-            background: #1a1a1a;
-            border: 1px solid var(--border);
-            border-radius: 7px;
-            color: var(--text);
-            font-size: 1rem;
-            outline: none;
-            margin-bottom: 1.1rem;
-            transition: border-color .18s;
+            width: 100%; padding: .65rem .9rem; background: #1a1a1a;
+            border: 1px solid var(--border); border-radius: 7px; color: var(--text);
+            font-size: 1rem; outline: none; margin-bottom: 1.1rem; transition: border-color .18s;
         }
         input:focus { border-color: var(--gold); }
         .btn {
-            width: 100%;
-            padding: .7rem;
-            background: var(--gold);
-            color: #000;
-            border: none;
-            border-radius: 7px;
-            font-size: .9rem;
-            font-weight: 700;
-            letter-spacing: .05em;
-            cursor: pointer;
-            transition: background .18s;
+            width: 100%; padding: .7rem; background: var(--gold); color: #000;
+            border: none; border-radius: 7px; font-size: .9rem; font-weight: 700;
+            letter-spacing: .05em; cursor: pointer; transition: background .18s;
         }
         .btn:hover { background: var(--gold-h); }
-        .alert {
-            padding: .65rem .9rem;
-            border-radius: 7px;
-            font-size: .84rem;
-            margin-bottom: 1rem;
-        }
+        .alert { padding: .65rem .9rem; border-radius: 7px; font-size: .84rem; margin-bottom: 1rem; }
         .alert-err  { background: var(--danger-bg); border: 1px solid rgba(224,82,82,.35); color: #f08080; }
         .alert-warn { background: var(--warn-bg);   border: 1px solid rgba(201,168,76,.35); color: var(--gold); }
         code { font-family: "SF Mono", Consolas, monospace; background: #1a1a1a; padding: .1em .35em; border-radius: 4px; }
@@ -106,22 +58,22 @@
     </div>
 
     <div class="card">
-        <h1>Вход</h1>
-        <p class="sub">Въведи паролата за достъп</p>
+        <h1>Login</h1>
+        <p class="sub">Enter your dashboard password</p>
 
         {% if error %}
         <div class="alert alert-err">{{ error }}</div>
         {% endif %}
 
         <form method="post" action="/login">
-            <label for="pw">Парола</label>
+            <label for="pw">Password</label>
             <input type="password" id="pw" name="password" autofocus placeholder="••••••••" required>
-            <button type="submit" class="btn">Влез →</button>
+            <button type="submit" class="btn">Sign in →</button>
         </form>
 
         {% if default_password %}
         <div class="alert alert-warn" style="margin-top:1rem;margin-bottom:0;">
-            Стандартна парола: <code>porsche</code> — смени я след вход.
+            Default password: <code>porsche</code> — please change it after login.
         </div>
         {% endif %}
     </div>

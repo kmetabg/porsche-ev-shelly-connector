@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="bg">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -142,10 +142,7 @@
 
         /* ── MISC ── */
         hr { border: none; border-top: 1px solid var(--border); margin: 1.4rem 0; }
-        .dot {
-            display: inline-block; width: 8px; height: 8px;
-            border-radius: 50%; margin-right: .4rem; vertical-align: middle;
-        }
+        .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: .4rem; vertical-align: middle; }
         .dot-ok  { background: var(--success); }
         .dot-err { background: var(--danger); }
         .chips { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .6rem; }
@@ -174,7 +171,6 @@
 {% block nav %}
 <nav>
     <a href="/" class="brand">
-        <!-- Porsche shield silhouette (inline SVG, no external dep) -->
         <svg viewBox="0 0 22 26" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M11 1L21 5.5V13C21 18.5 16.5 23.5 11 25C5.5 23.5 1 18.5 1 13V5.5L11 1Z"
                   stroke="#c9a84c" stroke-width="1.5" fill="none"/>
@@ -184,9 +180,9 @@
     </a>
     <div class="nav-links">
         <a href="/dashboard">Dashboard</a>
-        <a href="/settings">Настройки</a>
+        <a href="/settings">Settings</a>
         <a href="/docs">API</a>
-        <a href="/logout" class="out">Изход</a>
+        <a href="/logout" class="out">Logout</a>
     </div>
 </nav>
 {% endblock %}

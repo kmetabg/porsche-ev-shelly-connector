@@ -14,5 +14,5 @@ RUN mkdir -p /app/data /app/app/static/icons && \
 
 EXPOSE 8000
 
-# Render.com задава $PORT динамично; локално default-ва на 8000
+# Render sets $PORT automatically. Locally defaults to 8000.
 CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

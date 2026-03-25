@@ -191,7 +191,7 @@ class ConfigError(RuntimeError):
 def _get_credentials() -> tuple[str, str]:
     email, password = get_porsche_credentials()
     if not email or not password:
-        raise ConfigError("My Porsche credential-ите не са конфигурирани. Отиди в Настройки.")
+        raise ConfigError("My Porsche credentials are not configured. Go to Settings.")
     return email, password
 
 
@@ -331,7 +331,7 @@ async def login_submit(request: Request, password: str = Form(...)):
         request.session["authenticated"] = True
         return RedirectResponse("/dashboard", status_code=302)
     return templates.TemplateResponse(request, "login.html", {
-        "error": "Грешна парола. Опитай пак.",
+        "error": "Wrong password. Please try again.",
         "default_password": is_default_password(),
     }, status_code=401)
 
@@ -378,35 +378,35 @@ async def settings_page(request: Request):
 @app.post("/settings/porsche")
 async def settings_porsche(request: Request, email: str = Form(...), password: str = Form("")):
     if not email.strip():
-        request.session["flash_err"] = "Email не може да е празен."
+        request.session["flash_err"] = "Email cannot be empty."
         return RedirectResponse("/settings", status_code=302)
     existing_email, existing_password = get_porsche_credentials()
     final_password = password.strip() or (existing_password or "")
     if not final_password:
-        request.session["flash_err"] = "Въведи My Porsche парола."
+        request.session["flash_err"] = "Enter your My Porsche password."
         return RedirectResponse("/settings", status_code=302)
     save_porsche_credentials(email.strip(), final_password)
-    request.session["flash_ok"] = "My Porsche credential-ите са запазени."
+    request.session["flash_ok"] = "My Porsche credentials saved successfully."
     return RedirectResponse("/settings", status_code=302)
 
 
 @app.post("/settings/password")
 async def settings_password(request: Request, new_password: str = Form(...), confirm_password: str = Form(...)):
     if len(new_password) < 6:
-        request.session["flash_err"] = "Паролата трябва да е минимум 6 символа."
+        request.session["flash_err"] = "Password must be at least 6 characters."
         return RedirectResponse("/settings", status_code=302)
     if new_password != confirm_password:
-        request.session["flash_err"] = "Паролите не съвпадат."
+        request.session["flash_err"] = "Passwords do not match."
         return RedirectResponse("/settings", status_code=302)
     save_dashboard_password(new_password)
-    request.session["flash_ok"] = "Паролата е сменена."
+    request.session["flash_ok"] = "Password changed successfully."
     return RedirectResponse("/settings", status_code=302)
 
 
 @app.post("/settings/rotate-api-key")
 async def settings_rotate_api_key(request: Request):
     rotate_api_key()
-    request.session["flash_ok"] = "API ключът е сменен."
+    request.session["flash_ok"] = "API key rotated successfully."
     return RedirectResponse("/settings", status_code=302)
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -624,7 +624,7 @@ async def climate_start(
         "action": "climate_start",
         "target_temperature_c": temperature,
         "status": "PENDING",
-        "message": "Командата е приета. Резултатът ще е наличен след ~30-60 сек при следващ poll.",
+        "message": "Command accepted. Result will be available in ~30-60s on next poll.",
     }
 
 
@@ -640,7 +640,7 @@ async def climate_stop(vin: str) -> dict[str, Any]:
         "vin": vin,
         "action": "climate_stop",
         "status": "PENDING",
-        "message": "Командата е приета. Резултатът ще е наличен след ~30-60 сек при следващ poll.",
+        "message": "Command accepted. Result will be available in ~30-60s on next poll.",
     }
 
 
