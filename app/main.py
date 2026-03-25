@@ -341,14 +341,18 @@ async def simple_get(request: Request):
     """Token helper page — enter Porsche credentials, get refresh token for Shelly direct script."""
     return templates.TemplateResponse(request, "simple.html", {
         "token": None, "vehicles": [], "error": None,
+        "captcha": None, "captcha_state": None,
+        "prefill_email": None,
     })
 
 
 @app.post("/simple")
 async def simple_post(
     request: Request,
-    email:    str = Form(...),
-    password: str = Form(...),
+    email:        str = Form(...),
+    password:     str = Form(...),
+    captcha_code: str = Form(""),
+    captcha_state:str = Form(""),
 ):
     """Authenticate with Porsche, return refresh token — nothing is stored."""
     import httpx as _httpx
@@ -357,6 +361,8 @@ async def simple_post(
             conn = Connection(
                 email=email.strip(),
                 password=password,
+                captcha_code=captcha_code.strip() or None,
+                state=captcha_state.strip() or None,
                 async_client=client,
             )
             acc = PorscheConnectAccount(connection=conn)
@@ -369,21 +375,30 @@ async def simple_post(
             "token": refresh_token,
             "vehicles": vehicles,
             "error": None,
+            "captcha": None, "captcha_state": None,
+            "prefill_email": None,
         })
     except PorscheWrongCredentialsError:
         return templates.TemplateResponse(request, "simple.html", {
             "token": None, "vehicles": [],
             "error": "Wrong email or password.",
+            "captcha": None, "captcha_state": None,
+            "prefill_email": email,
         }, status_code=401)
-    except PorscheCaptchaRequiredError:
+    except PorscheCaptchaRequiredError as exc:
         return templates.TemplateResponse(request, "simple.html", {
             "token": None, "vehicles": [],
-            "error": "Porsche requires a captcha. Please log in via the My Porsche app first, then try again.",
-        }, status_code=428)
+            "error": None,
+            "captcha": exc.captcha,      # base64 image (data:image/svg+xml;base64,...)
+            "captcha_state": exc.state,
+            "prefill_email": email,
+        }, status_code=200)
     except Exception as exc:
         return templates.TemplateResponse(request, "simple.html", {
             "token": None, "vehicles": [],
             "error": f"Error: {exc}",
+            "captcha": None, "captcha_state": None,
+            "prefill_email": email,
         }, status_code=500)
 
 
