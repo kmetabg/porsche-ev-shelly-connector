@@ -1,0 +1,12 @@
+services:
+  api:
+    build:
+      context: .
+    container_name: porsche-api
+    env_file:
+      - .env
+    ports:
+      - "127.0.0.1:${PORT:-8061}:8000"
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped

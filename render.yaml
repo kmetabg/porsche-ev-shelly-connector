@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: porsche-connect
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /health
+
+    envVars:
+      - key: PORSCHE_EMAIL
+        sync: false          # потребителят попълва в Render dashboard
+
+      - key: PORSCHE_PASSWORD
+        sync: false
+
+      - key: PORSCHE_OVERVIEW_MODE
+        value: stored
+
+      - key: REFRESH_INTERVAL_MINUTES
+        value: "10"
+
+      - key: PORSCHE_TOKEN_FILE
+        value: /tmp/porsche_token.json   # /tmp е наличен на Render free tier

@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+pyporscheconnectapi
+jinja2
+python-multipart
+itsdangerous
+Pillow

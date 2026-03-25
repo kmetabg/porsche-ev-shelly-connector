@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}Настройки — Porsche Connect{% endblock %}
+
+{% block content %}
+<p class="page-title">Настройки</p>
+<p class="page-sub">Конфигурация на достъп и Porsche акаунт</p>
+
+{% if default_password %}
+<div class="alert alert-warn">
+    Ползваш стандартната парола <code>porsche</code>. Смени я по-долу.
+</div>
+{% endif %}
+
+{% if success %}
+<div class="alert alert-ok">{{ success }}</div>
+{% endif %}
+
+{% if error %}
+<div class="alert alert-err">{{ error }}</div>
+{% endif %}
+
+<!-- ── My Porsche credentials ─────────────────────────────────── -->
+<div class="card">
+    <p class="card-title">My Porsche акаунт</p>
+
+    <p style="font-size:.85rem; margin-bottom:1.25rem;">
+        {% if creds_ok %}
+        <span class="dot dot-ok"></span>Credential-ите са конфигурирани
+        {% else %}
+        <span class="dot dot-err"></span>Не са въведени credential-и — API-то не може да се свърже
+        {% endif %}
+    </p>
+
+    <form method="post" action="/settings/porsche">
+        <div class="field">
+            <label>Email (My Porsche акаунт)</label>
+            <input type="email" name="email"
+                   value="{{ porsche_email or '' }}"
+                   placeholder="your@email.com" required>
+        </div>
+        <div class="field">
+            <label>Парола</label>
+            <input type="password" name="password"
+                   placeholder="{% if creds_ok %}Остави празно — запазва текущата{% else %}My Porsche парола{% endif %}">
+            {% if creds_ok %}
+            <p class="hint">Остави полето празно, ако паролата не се е променила.</p>
+            {% endif %}
+        </div>
+        <button type="submit" class="btn">Запази credential-и</button>
+    </form>
+</div>
+
+<!-- ── Dashboard password ─────────────────────────────────────── -->
+<div class="card">
+    <p class="card-title">Парола за достъп до страницата</p>
+    <p style="font-size:.85rem; color:var(--muted); margin-bottom:1.25rem;">
+        Паролата, с която влизаш в тази страница.
+    </p>
+    <form method="post" action="/settings/password">
+        <div class="field">
+            <label>Нова парола</label>
+            <input type="password" name="new_password"
+                   placeholder="Минимум 6 символа" required minlength="6">
+        </div>
+        <div class="field">
+            <label>Потвърди</label>
+            <input type="password" name="confirm_password"
+                   placeholder="Повтори паролата" required minlength="6">
+        </div>
+        <button type="submit" class="btn">Смени парола</button>
+    </form>
+</div>
+
+<!-- ── API Key ─────────────────────────────────────────────────── -->
+<div class="card">
+    <p class="card-title">API Key (Shelly / програмен достъп)</p>
+    <p style="font-size:.85rem; color:var(--muted); margin-bottom:1rem;">
+        Използвай този ключ в Shelly скрипта или при директни API заявки.<br>
+        Подай го като header <code>X-API-Key: &lt;ключ&gt;</code> или query param <code>?api_key=&lt;ключ&gt;</code>.
+    </p>
+    <div style="display:flex;gap:.6rem;align-items:center;margin-bottom:1rem;flex-wrap:wrap;">
+        <input type="text" id="api-key-val" value="{{ api_key }}" readonly
+               style="flex:1;min-width:0;font-family:'SF Mono',Consolas,monospace;font-size:.82rem;cursor:pointer;"
+               onclick="this.select()">
+        <button onclick="copyKey()" class="btn" style="white-space:nowrap;padding:.55rem 1rem;font-size:.82rem;">
+            Копирай
+        </button>
+    </div>
+    <form method="post" action="/settings/rotate-api-key" onsubmit="return confirm('Ротацията ще невалидира стария ключ. Ще трябва да обновиш Shelly скрипта. Продължаваш?')">
+        <button type="submit" class="btn" style="background:var(--surface-2);color:var(--text);border:1px solid var(--border);font-size:.82rem;padding:.5rem .9rem;">
+            ↻ Генерирай нов ключ
+        </button>
+    </form>
+</div>
+
+<!-- ── API quick links ────────────────────────────────────────── -->
+<div class="card">
+    <p class="card-title">API Endpoints</p>
+    <div class="chips">
+        <a href="/dashboard" class="chip">Dashboard</a>
+        <a href="/docs"      class="chip">GET /docs</a>
+        <a href="/health"    class="chip">GET /health</a>
+        <a href="/vehicles"  class="chip">GET /vehicles</a>
+        <a class="chip" style="cursor:default;opacity:.6;">POST /refresh</a>
+        <a class="chip" style="cursor:default;opacity:.6;">GET /vehicles/{vin}/battery</a>
+        <a class="chip" style="cursor:default;opacity:.6;">POST /vehicles/{vin}/climate/start?temperature=20</a>
+        <a class="chip" style="cursor:default;opacity:.6;">POST /vehicles/{vin}/climate/stop</a>
+    </div>
+</div>
+<script>
+function copyKey() {
+    navigator.clipboard.writeText(document.getElementById('api-key-val').value)
+        .then(() => alert('API ключът е копиран!'));
+}
+</script>
+{% endblock %}

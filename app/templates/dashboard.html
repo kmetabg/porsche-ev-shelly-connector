@@ -1,0 +1,289 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Porsche Connect{% endblock %}
+
+{% block content %}
+
+{# ── Macro defined FIRST so Jinja2 can call it below ── #}
+{% macro render_vehicle(v) %}
+<div class="card vehicle-card" style="margin-bottom:1.5rem;">
+
+  {# Header #}
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:1rem;margin-bottom:1.5rem;">
+    <div>
+      <div style="font-size:1.25rem;font-weight:700;">{{ v.name }}</div>
+      <div style="color:var(--muted);font-size:.85rem;">
+        {{ v.model_year }} · {{ v.engine }}
+        · <code style="font-size:.8rem;">{{ v.vin }}</code>
+      </div>
+    </div>
+    <div style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;">
+      {% if v.connected %}
+        <span style="background:rgba(76,175,125,.15);border:1px solid rgba(76,175,125,.35);color:#7ed9a8;padding:.2rem .6rem;border-radius:4px;font-size:.78rem;font-weight:600;">ОНЛАЙН</span>
+      {% else %}
+        <span style="background:rgba(201,168,76,.12);border:1px solid rgba(201,168,76,.35);color:var(--gold);padding:.2rem .6rem;border-radius:4px;font-size:.78rem;font-weight:600;">ОФЛАЙН</span>
+      {% endif %}
+      {% if v.vehicle_locked is not none %}
+        {% if v.vehicle_locked %}
+          <span style="background:rgba(76,175,125,.15);border:1px solid rgba(76,175,125,.35);color:#7ed9a8;padding:.2rem .6rem;border-radius:4px;font-size:.78rem;">🔒 Заключен</span>
+        {% else %}
+          <span style="background:rgba(224,82,82,.12);border:1px solid rgba(224,82,82,.35);color:#f08080;padding:.2rem .6rem;border-radius:4px;font-size:.78rem;">🔓 Отключен</span>
+        {% endif %}
+      {% endif %}
+    </div>
+  </div>
+
+  {# Stats grid #}
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1rem;margin-bottom:1.5rem;">
+
+    {% if v.battery_level is not none %}
+    {# Battery gauge — spans 2 columns #}
+    <div style="grid-column:span 2;">
+      <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:.6rem;">Батерия</div>
+      {% set batt = v.battery_level %}
+      {% if batt >= 60 %}{% set bar_color = "#4caf7d" %}
+      {% elif batt >= 30 %}{% set bar_color = "#c9a84c" %}
+      {% else %}{% set bar_color = "#e05252" %}{% endif %}
+      <div style="display:flex;align-items:center;gap:1rem;">
+        <div style="flex:1;background:var(--surface-2);border-radius:999px;height:14px;overflow:hidden;border:1px solid var(--border);">
+          <div style="width:{{ batt }}%;height:100%;background:{{ bar_color }};border-radius:999px;transition:width .6s;"></div>
+        </div>
+        <div style="font-size:1.6rem;font-weight:700;min-width:3.5rem;text-align:right;color:{{ bar_color }};">{{ batt }}%</div>
+      </div>
+      {% if v.electric_range_km %}
+      <div style="font-size:.8rem;color:var(--muted);margin-top:.35rem;">⚡ ~{{ v.electric_range_km }} km обхват</div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {# Charging #}
+    {% if v.charging_mode %}
+    <div class="stat-box">
+      <div class="stat-label">Зареждане</div>
+      <div class="stat-val">
+        {% if v.charging_mode == "DIRECT" %}⚡ Директно
+        {% elif v.charging_mode == "PROFILE" %}📅 По профил
+        {% elif v.charging_mode == "DELAYED" %}⏱ Отложено
+        {% else %}{{ v.charging_mode }}{% endif %}
+      </div>
+      {% if v.charging_power_kw %}
+      <div class="stat-sub">{{ v.charging_power_kw | round(1) }} kW</div>
+      {% endif %}
+      {% if v.charging_target %}
+      <div class="stat-sub">Цел: {{ v.charging_target }}%</div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {# Climate status #}
+    <div class="stat-box">
+      <div class="stat-label">Климатизация</div>
+      {% if v.climate_on %}
+        <div class="stat-val" style="color:#7ed9a8;">● Включена</div>
+        {% if v.climate_target_temp_c is not none %}
+        <div class="stat-sub">{{ v.climate_target_temp_c }}°C</div>
+        {% endif %}
+      {% else %}
+        <div class="stat-val" style="color:var(--muted);">○ Изключена</div>
+      {% endif %}
+    </div>
+
+    {# Mileage #}
+    {% if v.mileage_km %}
+    <div class="stat-box">
+      <div class="stat-label">Километраж</div>
+      <div class="stat-val">{{ "{:,}".format(v.mileage_km | int).replace(",", "\u00a0") }}</div>
+      <div class="stat-sub">km</div>
+    </div>
+    {% endif %}
+
+    {# Doors & lids #}
+    {% if v.vehicle_closed is not none %}
+    <div class="stat-box">
+      <div class="stat-label">Врати / капаци</div>
+      {% if v.vehicle_closed %}
+        <div class="stat-val" style="color:#7ed9a8;">✓ Затворени</div>
+      {% else %}
+        <div class="stat-val" style="color:#f08080;">! Отворено</div>
+        {% if v.doors_and_lids %}
+        <div class="stat-sub" style="margin-top:.4rem;">
+          {% for door, state in v.doors_and_lids.items() %}
+            {% if state == "Open" %}
+            <div>{{ door.replace("OPEN_STATE_", "").replace("_", " ").title() }}</div>
+            {% endif %}
+          {% endfor %}
+        </div>
+        {% endif %}
+      {% endif %}
+    </div>
+    {% endif %}
+
+  </div>{# end stats grid #}
+
+  {# Climate remote control — BEV/PHEV only #}
+  {% if v.engine in ["BEV", "PHEV"] %}
+  <div style="border-top:1px solid var(--border);padding-top:1.25rem;">
+    <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:.85rem;">Дистанционна климатизация</div>
+    <div style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap;">
+      <div style="display:flex;align-items:center;gap:.4rem;">
+        <label for="temp-{{ v.vin }}" style="font-size:.8rem;color:var(--muted);">°C</label>
+        <input type="number" id="temp-{{ v.vin }}" value="20" min="10" max="30" step="0.5"
+          style="width:75px;padding:.4rem .6rem;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:.9rem;outline:none;">
+      </div>
+      <button onclick="startClimate('{{ v.vin }}')" class="btn" style="padding:.5rem 1rem;font-size:.85rem;">
+        ▶ Старт
+      </button>
+      <button onclick="stopClimate('{{ v.vin }}')" class="btn"
+        style="padding:.5rem 1rem;font-size:.85rem;background:var(--surface-2);color:var(--text);border:1px solid var(--border);">
+        ■ Стоп
+      </button>
+      <span id="climate-status-{{ v.vin }}" style="font-size:.8rem;color:var(--muted);"></span>
+    </div>
+  </div>
+  {% endif %}
+
+  {# Location link #}
+  {% if v.location and v.location.latitude %}
+  <div style="border-top:1px solid var(--border);padding-top:1rem;margin-top:1rem;">
+    <a href="https://www.google.com/maps?q={{ v.location.latitude }},{{ v.location.longitude }}"
+       target="_blank" rel="noopener" style="font-size:.82rem;color:var(--gold);">
+      📍 Виж на картата
+      {% if v.location.updated_at %}
+        · <span style="color:var(--muted);">{{ v.location.updated_at[:16] | replace("T", " ") }}</span>
+      {% endif %}
+    </a>
+  </div>
+  {% endif %}
+
+</div>
+{% endmacro %}
+
+{# ── Page header ── #}
+<div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:.75rem;margin-bottom:2rem;">
+  <div>
+    <p class="page-title">Dashboard</p>
+    <p class="page-sub">
+      {% if last_updated %}
+        Обновено: <span id="ts">{{ last_updated }}</span>
+      {% else %}
+        Данните не са заредени още
+      {% endif %}
+    </p>
+  </div>
+  <button id="refresh-btn" onclick="triggerRefresh()" class="btn" style="min-width:120px;">
+    ↻ Обнови
+  </button>
+</div>
+
+{% if default_password %}
+<div class="alert alert-warn" style="margin-bottom:1.5rem;">
+  Ползваш стандартна парола <code>porsche</code> — <a href="/settings">смени я</a>.
+</div>
+{% endif %}
+
+{% if not creds_ok %}
+<div class="alert alert-err" style="margin-bottom:1.5rem;">
+  My Porsche credential-ите не са конфигурирани. <a href="/settings">Добави ги в Настройки</a>.
+</div>
+{% endif %}
+
+{# ── Vehicle cards ── #}
+<div id="vehicles-container">
+  {% if vehicles %}
+    {% for v in vehicles %}{{ render_vehicle(v) }}{% endfor %}
+  {% elif creds_ok %}
+  <div class="card" style="text-align:center;padding:3rem;color:var(--muted);">
+    <div style="font-size:2.5rem;margin-bottom:1rem;">⏳</div>
+    <p>Данните се зареждат при следващия refresh.</p>
+    <button onclick="triggerRefresh()" class="btn" style="margin-top:1.5rem;">Зареди сега</button>
+  </div>
+  {% endif %}
+</div>
+
+<style>
+  .stat-box { background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:.85rem 1rem; }
+  .stat-label { font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); margin-bottom:.35rem; }
+  .stat-val { font-size:1rem; font-weight:600; }
+  .stat-sub { font-size:.78rem; color:var(--muted); margin-top:.2rem; }
+</style>
+
+<script>
+async function triggerRefresh() {
+  const btn = document.getElementById('refresh-btn');
+  btn.textContent = '⏳ Обновява...';
+  btn.disabled = true;
+  try {
+    const r = await fetch('/refresh', { method: 'POST' });
+    if (r.ok) {
+      location.reload();
+    } else {
+      const d = await r.json();
+      alert('Грешка: ' + (d.detail?.message || JSON.stringify(d)));
+    }
+  } catch(e) {
+    alert('Мрежова грешка: ' + e);
+  } finally {
+    btn.textContent = '↻ Обнови';
+    btn.disabled = false;
+  }
+}
+
+async function startClimate(vin) {
+  const temp = document.getElementById('temp-' + vin).value;
+  const statusEl = document.getElementById('climate-status-' + vin);
+  statusEl.textContent = '⏳ Изпращам...';
+  statusEl.style.color = 'var(--muted)';
+  try {
+    const r = await fetch(`/vehicles/${vin}/climate/start-sync?temperature=${temp}`, { method: 'POST' });
+    const d = await r.json();
+    if (r.ok) {
+      statusEl.textContent = '✓ Изпратено (' + d.status + ')';
+      statusEl.style.color = '#7ed9a8';
+      setTimeout(() => triggerRefresh(), 4000);
+    } else {
+      statusEl.textContent = '✗ ' + (d.detail?.message || d.detail?.error || 'Грешка');
+      statusEl.style.color = '#f08080';
+    }
+  } catch(e) {
+    statusEl.textContent = '✗ ' + e;
+    statusEl.style.color = '#f08080';
+  }
+}
+
+async function stopClimate(vin) {
+  const statusEl = document.getElementById('climate-status-' + vin);
+  statusEl.textContent = '⏳ Изпращам...';
+  statusEl.style.color = 'var(--muted)';
+  try {
+    const r = await fetch(`/vehicles/${vin}/climate/stop-sync`, { method: 'POST' });
+    const d = await r.json();
+    if (r.ok) {
+      statusEl.textContent = '✓ Спряна (' + d.status + ')';
+      statusEl.style.color = '#7ed9a8';
+      setTimeout(() => triggerRefresh(), 4000);
+    } else {
+      statusEl.textContent = '✗ ' + (d.detail?.message || d.detail?.error || 'Грешка');
+      statusEl.style.color = '#f08080';
+    }
+  } catch(e) {
+    statusEl.textContent = '✗ ' + e;
+    statusEl.style.color = '#f08080';
+  }
+}
+
+// Format timestamp
+const tsEl = document.getElementById('ts');
+if (tsEl) {
+  try {
+    const d = new Date(tsEl.textContent.trim());
+    tsEl.textContent = d.toLocaleString('bg-BG', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit'
+    });
+  } catch(e) {}
+}
+
+// Auto-refresh every 15 min
+setTimeout(() => triggerRefresh(), 900000);
+</script>
+
+{% endblock %}
