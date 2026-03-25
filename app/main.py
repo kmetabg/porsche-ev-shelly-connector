@@ -120,9 +120,9 @@ _STATIC_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 
 # Auth middleware registered first → becomes INNERMOST → runs after session MW
-_PUBLIC = {"/login", "/simple", "/simple/cached"}
+_PUBLIC = {"/login", "/simple", "/simple/cached", "/simple/shelly-token"}
 _PUBLIC_PREFIXES = ("/static",)
-_API_PREFIXES = ("/vehicles", "/health", "/refresh", "/openapi.json")
+_API_PREFIXES = ("/vehicles", "/health", "/refresh", "/token", "/openapi.json")
 
 
 @app.middleware("http")
@@ -711,6 +711,109 @@ async def settings_rotate_api_key(request: Request):
 # ══════════════════════════════════════════════════════════════════════════════
 # CORE API
 # ══════════════════════════════════════════════════════════════════════════════
+
+@app.post("/simple/shelly-token")
+async def simple_shelly_token(
+    request: Request,
+    password:      str = Form(...),
+    captcha_code:  str = Form(""),
+    captcha_state: str = Form(""),
+):
+    """Do a SECOND independent login → dedicated refresh_token for Shelly Direct.
+    Server keeps its own token chain untouched.
+    """
+    if not check_dashboard_password(password):
+        return templates.TemplateResponse(request, "simple.html", {
+            "token": None, "vehicles": [], "has_cached_token": True,
+            "error": "Wrong password.", "captcha": None,
+            "captcha_state": None, "prefill_email": None,
+            "shelly_mode": True,
+        }, status_code=401)
+
+    email, pwd = get_porsche_credentials()
+    if not email or not pwd:
+        return templates.TemplateResponse(request, "simple.html", {
+            "token": None, "vehicles": [], "has_cached_token": True,
+            "error": "No Porsche credentials configured in Settings.",
+            "captcha": None, "captcha_state": None, "prefill_email": None,
+            "shelly_mode": True,
+        }, status_code=500)
+
+    last_err = ""
+    for attempt in range(1, 3):
+        try:
+            refresh_token, v_data = await asyncio.get_event_loop().run_in_executor(
+                None, _porsche_login_sync,
+                email, pwd,
+                captcha_code.strip() or None,
+                captcha_state.strip() or None,
+            )
+            return templates.TemplateResponse(request, "simple.html", {
+                "token": refresh_token, "vehicles": v_data,
+                "has_cached_token": True, "error": None,
+                "captcha": None, "captcha_state": None, "prefill_email": None,
+                "shelly_mode": True,
+            })
+        except PorscheWrongCredentialsError:
+            return templates.TemplateResponse(request, "simple.html", {
+                "token": None, "vehicles": [], "has_cached_token": True,
+                "error": "Wrong Porsche password. Update credentials in Settings.",
+                "captcha": None, "captcha_state": None, "prefill_email": None,
+                "shelly_mode": True,
+            }, status_code=401)
+        except PorscheCaptchaRequiredError as exc:
+            return templates.TemplateResponse(request, "simple.html", {
+                "token": None, "vehicles": [], "has_cached_token": True,
+                "error": None, "captcha": exc.captcha, "captcha_state": exc.state,
+                "prefill_email": None, "shelly_mode": True,
+            })
+        except Exception as exc:
+            import traceback
+            last_err = str(exc)
+            _log.warning("shelly-token attempt %d: %s\n%s", attempt, exc, traceback.format_exc())
+            if attempt < 2:
+                await asyncio.sleep(2)
+
+    return templates.TemplateResponse(request, "simple.html", {
+        "token": None, "vehicles": [], "has_cached_token": True,
+        "error": f"Could not connect to Porsche. ({last_err})",
+        "captcha": None, "captcha_state": None, "prefill_email": None,
+        "shelly_mode": True,
+    }, status_code=503)
+
+
+@app.get("/token")
+async def get_access_token() -> dict[str, Any]:
+    """Return a valid access token — refreshes if needed.
+    Used by shelly_direct.js so Shelly can call Porsche API directly
+    without managing OAuth2 token rotation itself.
+    Requires API key auth (handled by middleware).
+    """
+    try:
+        token = await _load_token()
+        if not token:
+            raise HTTPException(status_code=503, detail={"error": "no_token", "message": "No cached token. Configure credentials in Settings first."})
+
+        from pyporscheconnectapi.oauth2 import OAuth2Token
+        ot = OAuth2Token(token)
+
+        # Refresh if expired or expiring within 5 min
+        if ot.is_expired(leeway=300):
+            _log.info("Token expired — refreshing for /token endpoint")
+            account = await _build_account()
+            await account.get_vehicles()   # triggers token refresh internally
+            await _close_account(account)
+            token = await _load_token()
+
+        return {
+            "access_token": token.get("access_token", ""),
+            "expires_at": token.get("expires_at"),
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail={"error": str(exc)})
+
 
 @app.get("/health")
 async def health() -> dict[str, Any]:
