@@ -6,18 +6,55 @@ Connect your **Porsche Taycan, Macan EV, Panamera PHEV** (any Porsche Connect ve
 
 ---
 
+## Screenshots
+
+### Web Dashboard
+![Web dashboard showing Taycan 4 Cross Turismo with battery gauge at 85%, charging status, climate control and map link](.github/assets/dashboard.png)
+
+### Shelly Components
+![Shelly web UI showing all virtual components: Battery, Temperature slider, Climate toggle, Locked, Doors, Charging Status, Charging kW](.github/assets/shelly-components.png)
+
+### Shelly App — Mobile
+![Shelly mobile app showing Porsche as a virtual device with all components visible including battery 83%, temperature 22C, climate toggle, locked NO, doors CLOSE, charging 10.25 kW](.github/assets/shelly-app.png)
+
+---
+
+## Why connect Porsche to Shelly?
+
+By bridging your Porsche to the Shelly ecosystem you unlock the full power of smart home automation:
+
+### 🕐 1. Climate scheduling
+Set recurring schedules directly in the Shelly app — preheat or pre-cool the cabin every weekday at 7:45 AM without touching the My Porsche app.
+
+### 📊 2. Battery history
+Shelly logs all component values over time. Track your battery level trends, charging patterns and range degradation through built-in charts — weeks and months of history.
+
+### 🔔 3. Charging notifications
+Trigger push notifications when charging starts or finishes. Get alerted if charging unexpectedly stops (e.g. cable disconnected, power outage) — directly to your phone via the Shelly app.
+
+### ⚡ 4. Automatic load balancing
+When the Taycan starts charging (Charging kW > 0), automatically turn off other high-power loads — water heater, dryer, dishwasher — to stay within your home's power limit. When charging ends, restore them automatically.
+
+### 🛑 5. Stop charging at target %
+Create a Shelly scene: *if Battery % reaches 80 → stop charging*. Preserve battery longevity by avoiding unnecessary charging to 100%.
+
+### ☀️ 6. Solar-aware charging
+If you have solar panels connected to Shelly (energy meter), automatically start charging only when solar production exceeds home consumption — charge for free from the sun. Stop charging when clouds reduce output below the threshold.
+
+---
+
 ## What it does
 
 A lightweight FastAPI server acts as a bridge between Porsche Connect and your Shelly device:
 
-- **Battery level** → `number:200`
-- **Climate control** (start/stop with temperature) → `boolean:200` toggle
-- **Lock status** → `boolean:201`
-- **Doors/lids** → `boolean:202`
-- **Charging power (kW)** → `number:202`
-- **Dashboard** with battery gauge, live status, climate control buttons
-
-![Shelly components showing battery 86%, climate toggle, locked status, doors closed, charging kW](.github/preview.png)
+| Shelly Component | Data |
+|---|---|
+| `number:200` Battery % | Current state of charge |
+| `number:201` Climate temp °C | Target temperature for climate (slider) |
+| `number:202` Charging kW | Active charging power |
+| `boolean:200` Climate | Toggle to start/stop remote climatisation |
+| `boolean:201` Locked | Vehicle lock status |
+| `boolean:202` Doors | All doors and lids closed? |
 
 ---
 
@@ -31,13 +68,10 @@ Click **Fork** (top right) → Fork to your GitHub account.
 
 ### Step 2 — Deploy to Render
 
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy)
-
-Or manually:
-1. Go to [render.com](https://render.com) → **New** → **Web Service**
-2. Connect your GitHub account → select your fork
+1. Go to [render.com](https://render.com) → Sign up (free) → **New** → **Web Service**
+2. Connect your GitHub account → select your fork of this repo
 3. Render auto-detects the `Dockerfile` ✓
-4. Set these **Environment Variables**:
+4. Set these **Environment Variables** in the Render dashboard:
 
 | Variable | Value |
 |---|---|
@@ -50,6 +84,8 @@ Or manually:
 5. Click **Deploy** → wait ~2 min
 6. Copy your URL: `https://porsche-connect-xxxx.onrender.com`
 
+> 💡 **Why free tier works:** Render's free plan sleeps after 15 min of inactivity. The Shelly script polls every 10 minutes — keeping the server always awake.
+
 ### Step 3 — First login
 
 Open your Render URL in browser → you'll see the login page.
@@ -60,28 +96,32 @@ Open your Render URL in browser → you'll see the login page.
 
 Settings → **My Porsche Account** → enter email + password → Save.
 
+The server will connect to Porsche and cache your vehicle data.
+
 ### Step 5 — Copy your API key
 
-Settings → **API Key** → copy it (you'll need it for the Shelly script).
+Settings → **API Key** → Copy. You'll need it for the Shelly script.
 
 ---
 
 ## Shelly Setup
 
-### Required: Shelly Pro or Gen2+ device with firmware ≥ 1.1
+### Requirements
+- Shelly Pro or Gen2+ device (1PM Mini Gen3, Pro 4PM, Plus 1, etc.)
+- Firmware ≥ 1.1.0 (for virtual components support)
 
 ### Step 1 — Create virtual components
 
 Go to your Shelly web UI → **Components** → **Add virtual component**:
 
-| Type | ID | Label | Notes |
+| Type | ID | Label | View |
 |---|---|---|---|
-| Number | 200 | Battery % | view: label |
-| Number | 201 | Climate temp °C | view: slider, min: 10, max: 30 |
-| Number | 202 | Charging kW | view: label |
-| Boolean | 200 | Climate | view: toggle |
-| Boolean | 201 | Locked | view: label |
-| Boolean | 202 | Doors closed | view: label |
+| Number | 200 | Battery % | label |
+| Number | 201 | Climate temp °C | slider (min: 10, max: 30) |
+| Number | 202 | Charging kW | label |
+| Boolean | 200 | Climate | toggle |
+| Boolean | 201 | Locked | label |
+| Boolean | 202 | Doors | label |
 
 ### Step 2 — Install the script
 
@@ -91,9 +131,9 @@ Go to your Shelly web UI → **Components** → **Add virtual component**:
 4. Edit the top 3 variables:
 
 ```javascript
-var API_BASE = "https://YOUR-RENDER-URL.onrender.com";
-var API_KEY  = "your-api-key-from-settings";
-var VIN      = "WP0ZZZY1XXXXXXXX";   // Your VIN (found in My Porsche app)
+var API_BASE = "https://YOUR-RENDER-URL.onrender.com";  // your Render URL
+var API_KEY  = "your-api-key-from-settings";            // from Settings → API Key
+var VIN      = "WP0ZZZY1XXXXXXXX";                      // your VIN (My Porsche app → Vehicle)
 ```
 
 5. **Save** → **Start**
@@ -108,8 +148,12 @@ In the script console you should see:
 [Porsche] Climate ON: false
 [Porsche] Locked: true
 [Porsche] Doors closed: true
-[Porsche] Charging kW: 0
+[Porsche] Charging kW: 10.25
 ```
+
+### Step 4 — Add to Shelly app
+
+Open the **Shelly app** → your device → the Porsche virtual device will appear with all components. Customize the name, icon and room from the app.
 
 ---
 
@@ -119,7 +163,7 @@ In the script console you should see:
 git clone https://github.com/kmetabg/porsche-ev-shelly-connector.git
 cd porsche-ev-shelly-connector
 cp .env.example .env
-# Edit .env with your credentials
+# Edit .env — add PORSCHE_EMAIL and PORSCHE_PASSWORD
 docker compose up -d
 ```
 
@@ -129,13 +173,18 @@ Open `http://localhost:8000` → login with password `porsche`.
 
 ## Supported vehicles
 
-Any vehicle with **Porsche Connect** subscription:
-- Taycan (all variants)
-- Macan EV (2024+)
-- Panamera (2021+, PHEV)
-- Cayenne (2017+, E3)
-- 911 (992+)
-- Boxster / Cayman 718
+Any vehicle with an active **Porsche Connect** subscription:
+
+| Model | From |
+|---|---|
+| Taycan (all variants) | 2019 |
+| Macan EV | 2024 |
+| Panamera (PHEV) | 2021 |
+| Cayenne (E-Hybrid) | 2017 |
+| 911 | 992 (2019) |
+| Boxster / Cayman 718 | 2016 |
+
+Check [connect-store.porsche.com](https://connect-store.porsche.com) to confirm your model is supported.
 
 ---
 
@@ -145,28 +194,24 @@ All endpoints require `?api_key=YOUR_KEY` or header `X-API-Key: YOUR_KEY`.
 
 | Method | Endpoint | Description |
 |---|---|---|
-| GET | `/health` | Server status |
-| GET | `/vehicles` | List vehicles |
+| GET | `/health` | Server + cache status |
+| GET | `/vehicles` | List vehicles from cache |
 | GET | `/vehicles/{vin}/battery` | Battery, charging, doors, lock status |
-| GET | `/vehicles/{vin}/climate/start?temperature=21` | Start climate (async) |
-| GET | `/vehicles/{vin}/climate/stop` | Stop climate (async) |
-| POST | `/refresh` | Force cache refresh |
+| GET | `/vehicles/{vin}/climate/start?temperature=21` | Start climate (async, instant response) |
+| GET | `/vehicles/{vin}/climate/stop` | Stop climate (async, instant response) |
+| POST | `/refresh` | Force cache refresh from Porsche API |
 
----
-
-## Captcha handling
-
-If Porsche requires captcha during login, the server returns HTTP `428` with a base64 captcha image. Solve it in the dashboard Settings page.
+The `/climate/start` and `/climate/stop` endpoints return immediately with `{"status": "PENDING"}` — the command runs in the background. The Shelly script polls every 5 seconds to detect when the car confirms the action.
 
 ---
 
 ## Credits
 
-- [pyporscheconnectapi](https://github.com/CJNE/pyporscheconnectapi) by Johan Isaksson — the Python library making this possible
-- Porsche Connect API reverse-engineered by the community
+- [pyporscheconnectapi](https://github.com/CJNE/pyporscheconnectapi) by Johan Isaksson — the Python library that makes this possible
+- Porsche Connect API reverse-engineered by the open-source community
 
 ---
 
 ## Disclaimer
 
-This project is not affiliated with or endorsed by Porsche AG. Use at your own risk.
+This project is **not affiliated with or endorsed by Porsche AG**. It uses an unofficial API that may break at any time. Use at your own risk.
