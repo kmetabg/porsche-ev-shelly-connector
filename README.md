@@ -61,6 +61,7 @@ A lightweight FastAPI server acts as a bridge between Porsche Connect and your S
 | `boolean:200` Climate | Toggle to start/stop remote climatisation |
 | `boolean:201` Locked | Vehicle lock status |
 | `boolean:202` Doors | All doors and lids closed? |
+| `boolean:203` Charging | True when power is actively flowing (kW > 0) |
 
 ---
 
@@ -128,6 +129,7 @@ Go to your Shelly web UI → **Components** → **Add virtual component**:
 | Boolean | 200 | Climate | toggle |
 | Boolean | 201 | Locked | label |
 | Boolean | 202 | Doors | label |
+| Boolean | 203 | Charging | label |
 
 ### Step 2 — Install the script
 
