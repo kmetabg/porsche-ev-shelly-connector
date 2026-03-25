@@ -24,6 +24,7 @@ var vChargingKw = Virtual.getHandle("number:202");   // Charging kW
 var vClimate    = Virtual.getHandle("boolean:200");  // Climate toggle
 var vLocked     = Virtual.getHandle("boolean:201");  // Locked
 var vDoors      = Virtual.getHandle("boolean:202");  // Doors closed
+var vCharging   = Virtual.getHandle("boolean:203");  // Actively charging (power > 0)
 
 // Флаг: скриптът задава vClimate → игнорираме "change" event
 var _climateUpdating = false;
@@ -123,6 +124,9 @@ function pollVehicle() {
 
           // number:202 — Charging kW
           if (vChargingKw) { vChargingKw.setValue(kw); }
+
+          // boolean:203 — Actively charging (true = power flowing)
+          if (vCharging) { vCharging.setValue(chg); }
 
           print("[Porsche] Charger: plugged=" + plugged + " charging=" + chg + " " + kwStr);
           _climateUpdating = false;  // флагът се нулира накрая
