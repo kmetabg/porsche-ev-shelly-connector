@@ -12,9 +12,9 @@
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
-var API_BASE = "https://mitko.shelly.link:8060";
-var API_KEY  = "OgSHDo0VCELNcE-1S8bvkbH30YaV1GuX6dHPWRy_iVU";
-var VIN      = "WP0ZZZY15SSA59196";
+var API_BASE = "https://YOUR-RENDER-URL.onrender.com";  // ← замени с твоя URL
+var API_KEY  = "YOUR-API-KEY";                          // ← от Settings → API Key
+var VIN      = "YOUR-VIN";                              // ← VIN от My Porsche app
 var POLL_SEC = 600;    // 10 мин — Render free не заспива (sleep след 15 мин без заявки)
 
 // Виртуални компоненти — получаваме handles веднъж при старт
