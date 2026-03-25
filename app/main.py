@@ -346,23 +346,139 @@ async def simple_get(request: Request):
     })
 
 
-async def _porsche_login(email: str, password: str,
-                         captcha_code: str | None, state: str | None) -> tuple:
-    """Returns (refresh_token, vehicles) or raises."""
-    async with httpx.AsyncClient() as client:
-        conn = Connection(
-            email=email,
-            password=password,
-            captcha_code=captcha_code or None,
-            state=state or None,
-            async_client=client,
-        )
-        acc = PorscheConnectAccount(connection=conn)
-        vehicles = await acc.get_vehicles()
-        refresh_token = dict(conn.token).get("refresh_token", "")
+def _porsche_login_sync(email: str, password: str,
+                        captcha_code: str | None, state: str | None) -> tuple:
+    """Fully synchronous Porsche OAuth2 login using httpx.Client (no asyncio).
+    Bypasses all uvloop/async DNS issues.
+    Returns (refresh_token, vehicles_data) or raises PorscheWrongCredentialsError /
+    PorscheCaptchaRequiredError / PorscheExceptionError.
+    """
+    import re
+    from urllib.parse import parse_qs, urlparse
+    from bs4 import BeautifulSoup
+
+    CLIENT_ID    = "XhygisuebbrqQ80byOuU5VncxLIm8E6H"
+    X_CLIENT_ID  = "41843fb4-691d-4970-85c7-2673e8ecef40"
+    USER_AGENT   = "pyporscheconnectapi/0.2.7"
+    REDIRECT_URI = "my-porsche-app://auth0/callback"
+    AUDIENCE     = "https://api.porsche.com"
+    SCOPE        = "openid profile email offline_access mbb cars"
+    AUTH_SERVER  = "identity.porsche.com"
+    TOKEN_URL    = f"https://{AUTH_SERVER}/oauth/token"
+    API_BASE     = "https://api.ppa.porsche.com/app"
+
+    headers = {"User-Agent": USER_AGENT, "X-Client-ID": X_CLIENT_ID}
+
+    with httpx.Client(follow_redirects=False, timeout=30, verify=True) as c:
+
+        # ── Step 1: /authorize ────────────────────────────────────────────────
+        r = c.get(f"https://{AUTH_SERVER}/authorize", headers=headers, params={
+            "response_type": "code", "client_id": CLIENT_ID,
+            "redirect_uri": REDIRECT_URI, "audience": AUDIENCE,
+            "scope": SCOPE, "state": "porsche-shelly",
+        })
+        if r.status_code != 302:
+            raise PorscheExceptionError("authorize step failed")
+        location = r.headers.get("location", "")
+        parsed = urlparse(location)
+        loc_params = parse_qs(parsed.query)
+
+        # Already have code → skip login
+        if loc_params.get("code"):
+            auth_code = loc_params["code"][0]
+        else:
+            # ── Step 2/3: Identifier First flow ──────────────────────────────
+            auth0_state = captcha_state or loc_params.get("state", [None])[0]
+            if not auth0_state:
+                raise PorscheExceptionError("No state parameter from authorize")
+
+            id_data: dict = {
+                "state": auth0_state, "username": email,
+                "js-available": True, "webauthn-available": False,
+                "is-brave": False, "webauthn-platform-available": False,
+                "action": "default",
+            }
+            if captcha_code:
+                id_data["captcha"] = captcha_code
+
+            r2 = c.post(f"https://{AUTH_SERVER}/u/login/identifier",
+                        data=id_data, params={"state": auth0_state}, headers=headers)
+
+            if r2.status_code == 401:
+                raise PorscheWrongCredentialsError("wrong credentials")
+
+            if r2.status_code == 400:
+                # Need captcha
+                soup = BeautifulSoup(r2.text, "html.parser")
+                # Try to extract captcha image
+                captcha_img = None
+                m = re.search(r'atob\("([A-Za-z0-9+/=]+)"', r2.text)
+                if m:
+                    import base64, json as _json
+                    try:
+                        ctx = _json.loads(base64.b64decode(m.group(1)).decode())
+                        captcha_img = ctx.get("screen", {}).get("captcha", {}).get("image")
+                    except Exception:
+                        pass
+                if not captcha_img:
+                    img = soup.find("img", {"alt": "captcha"})
+                    if img:
+                        captcha_img = img.get("src")
+                if not captcha_img:
+                    m2 = re.search(r"(data:image/svg[^ ]+)", r2.text)
+                    if m2:
+                        captcha_img = m2.group(1)
+                exc = PorscheCaptchaRequiredError(captcha=captcha_img, state=auth0_state)
+                raise exc
+
+            # Step 3: Password
+            r3 = c.post(f"https://{AUTH_SERVER}/u/login/password",
+                        data={"state": auth0_state, "username": email,
+                              "password": password, "action": "default"},
+                        params={"state": auth0_state}, headers=headers)
+            if r3.status_code == 400:
+                raise PorscheWrongCredentialsError("wrong password")
+
+            resume_path = r3.headers.get("location", "")
+            if not resume_path:
+                raise PorscheExceptionError("No resume path after password")
+
+            # Step 4: Resume → get auth code
+            import time; time.sleep(2.5)
+            resume_url = resume_path if resume_path.startswith("http") \
+                         else f"https://{AUTH_SERVER}{resume_path}"
+            r4 = c.get(resume_url, headers=headers)
+            loc4 = r4.headers.get("location", "")
+            code_params = parse_qs(urlparse(loc4).query)
+            auth_code = code_params.get("code", [None])[0]
+            if not auth_code:
+                raise PorscheExceptionError(f"No auth code in redirect: {loc4[:80]}")
+
+        # ── Step 5: Exchange code for tokens ──────────────────────────────────
+        r5 = c.post(TOKEN_URL, headers=headers, data={
+            "client_id": CLIENT_ID, "grant_type": "authorization_code",
+            "code": auth_code, "redirect_uri": REDIRECT_URI,
+        })
+        if r5.status_code != 200:
+            raise PorscheExceptionError(f"token exchange failed: {r5.status_code}")
+        tokens = r5.json()
+        refresh_token = tokens.get("refresh_token", "")
+        access_token  = tokens.get("access_token", "")
         if not refresh_token:
-            raise ValueError("No refresh token in response.")
-        return refresh_token, vehicles
+            raise PorscheExceptionError("No refresh_token in response")
+
+        # ── Step 6: Get vehicles ───────────────────────────────────────────────
+        r6 = c.get(f"{API_BASE}/connect/v1/vehicles", headers={
+            **headers,
+            "Authorization": f"Bearer {access_token}",
+        })
+        if r6.status_code != 200:
+            raise PorscheExceptionError(f"vehicles call failed: {r6.status_code}")
+        vehicles_raw = r6.json()
+        v_data = [{"vin": v.get("vin", ""), "model_name": v.get("modelName", "Unknown"),
+                   "model_year": v.get("modelType", {}).get("year", "")}
+                  for v in (vehicles_raw if isinstance(vehicles_raw, list) else [])]
+        return refresh_token, v_data
 
 
 @app.post("/simple")
@@ -379,12 +495,16 @@ async def simple_post(
     ctx_err = {"token": None, "vehicles": [], "error": None,
                "captcha": None, "captcha_state": None, "prefill_email": email.strip()}
 
-    last_exc: Exception | None = None
-    for attempt in range(1, 4):          # up to 3 attempts for transient errors
+    last_err: str = ""
+    for attempt in range(1, 3):          # up to 2 attempts
         try:
-            refresh_token, vehicles = await _porsche_login(
+            # Run in thread executor — fresh event loop avoids uvloop async DNS issues
+            refresh_token, vehicles = await asyncio.get_event_loop().run_in_executor(
+                None,
+                _porsche_login_sync,
                 email.strip(), password,
-                captcha_code.strip(), captcha_state.strip(),
+                captcha_code.strip() or None,
+                captcha_state.strip() or None,
             )
             return templates.TemplateResponse(request, "simple.html", {
                 **ctx_ok, "token": refresh_token, "vehicles": vehicles,
@@ -400,22 +520,17 @@ async def simple_post(
                 **ctx_err, "captcha": exc.captcha, "captcha_state": exc.state,
             })
 
-        except (OSError, httpx.ConnectError, httpx.ConnectTimeout) as exc:
-            last_exc = exc
-            _log.warning("simple_post attempt %d: network error %s", attempt, exc)
-            if attempt < 3:
-                await asyncio.sleep(2)   # brief pause before retry
-            continue
-
         except Exception as exc:
-            return templates.TemplateResponse(request, "simple.html", {
-                **ctx_err, "error": str(exc),
-            }, status_code=500)
+            import traceback
+            last_err = str(exc)
+            _log.warning("simple_post attempt %d error: %s\n%s",
+                         attempt, exc, traceback.format_exc())
+            if attempt < 2:
+                await asyncio.sleep(2)
 
-    # All retries exhausted
     return templates.TemplateResponse(request, "simple.html", {
         **ctx_err,
-        "error": "Connection to Porsche servers failed after 3 attempts. Please try again in a few seconds.",
+        "error": f"Could not connect to Porsche. Please try again. ({last_err})",
     }, status_code=503)
 
 
