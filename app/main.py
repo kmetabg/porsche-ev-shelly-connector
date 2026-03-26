@@ -77,7 +77,11 @@ async def _background_poller():
             try:
                 await _do_refresh()
             except Exception as exc:
-                _log.warning("Background refresh failed: %s", exc)
+                import traceback
+                _log.warning("Background refresh failed: %s | %s\n%s",
+                             type(exc).__name__,
+                             getattr(exc, 'message', str(exc)),
+                             traceback.format_exc())
         await asyncio.sleep(REFRESH_INTERVAL)
 
 
