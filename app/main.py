@@ -70,18 +70,42 @@ async def lifespan(application: FastAPI):
 
 
 async def _background_poller():
-    """Refresh vehicle data every REFRESH_INTERVAL seconds."""
+    """Refresh vehicle data every REFRESH_INTERVAL seconds.
+    Self-healing: after 3 consecutive failures the token file is cleared
+    so the next attempt does a full re-login instead of retrying a bad token.
+    """
     await asyncio.sleep(5)   # short startup delay
+    consecutive_failures = 0
+
     while True:
         if credentials_configured():
             try:
                 await _do_refresh()
+                consecutive_failures = 0   # reset on success
             except Exception as exc:
                 import traceback
-                _log.warning("Background refresh failed: %s | %s\n%s",
-                             type(exc).__name__,
-                             getattr(exc, 'message', str(exc)),
-                             traceback.format_exc())
+                consecutive_failures += 1
+                _log.warning(
+                    "Background refresh failed (#%d): %s | %s\n%s",
+                    consecutive_failures,
+                    type(exc).__name__,
+                    getattr(exc, 'message', str(exc)),
+                    traceback.format_exc(),
+                )
+                # After 3 consecutive failures: wipe the cached token so the
+                # next attempt forces a full re-login instead of reusing a
+                # potentially stale/rotated refresh token.
+                if consecutive_failures >= 3:
+                    _log.warning(
+                        "3 consecutive refresh failures — clearing token cache "
+                        "to force re-login on next attempt."
+                    )
+                    try:
+                        TOKEN_FILE.write_text("{}", encoding="utf-8")
+                    except Exception:
+                        pass
+                    consecutive_failures = 0
+
         await asyncio.sleep(REFRESH_INTERVAL)
 
 
